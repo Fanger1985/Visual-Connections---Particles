@@ -1,0 +1,525 @@
+
+<html lang="en" >
+
+<head>
+  <meta charset="UTF-8">
+  <title>CodePen - Life Connections</title>
+ 
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Life & Project Connections</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+    </style>
+</head>
+
+<body>
+<input type="file" id="fileInput" style="display:none" onchange="importFromJsonFile(this)"/>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+    <script>
+// Define the global variables for the particle system and HTML elements
+let particles = [];
+let inputName, inputNotes, inputTags, submitButton;
+let selectedParticle = null;
+// Global variable for showing all connections
+let showAllConnections = false;
+// p5.js setup function, called once when the program starts
+function setup() {
+    createCanvas(windowWidth, windowHeight);
+    textAlign(CENTER);
+    textSize(12);
+
+    // Adjustments for spacing and button size
+    let spacing = 30; // Increased spacing between elements
+    let inputWidth = 160; // Keep the input fields width
+    let inputHeight = 20;
+    let buttonWidth = 80; // Keep the button width
+    let buttonHeight = 30; // Increase button height for a more prominent look
+
+    // Adjust positions
+    let startX = spacing;
+    let startY = spacing;
+
+    // Input fields
+    inputName = createNeumorphicInput(startX, startY, inputWidth, inputHeight, 'Name');
+    startX += inputWidth + spacing; // Increase spacing
+
+    inputNotes = createNeumorphicInput(startX, startY, inputWidth, inputHeight, 'Notes');
+    startX += inputWidth + spacing; // Increase spacing
+
+    inputTags = createNeumorphicInput(startX, startY, inputWidth, inputHeight, 'Tags');
+    startX += inputWidth + spacing; // Adjust this as needed to ensure they don't touch
+
+    // Submit and Delete buttons
+    submitButton = createNeumorphicButton('Submit', startX, startY, buttonWidth, buttonHeight, handleParticle);
+    startX += buttonWidth + spacing;
+
+    deleteButton = createNeumorphicButton('Delete', startX, startY, buttonWidth, buttonHeight, deleteSelectedParticle);
+
+    // Adjust startX for the Show All Connections checkbox
+    startX += buttonWidth + spacing;
+    toggleConnections = createCheckbox('Show All Connections', false);
+    toggleConnections.position(startX, startY + (buttonHeight / 4)); // Vertically centering the checkbox label
+  toggleConnections.changed(() => showAllConnections = toggleConnections.checked());
+
+    toggleConnections.style('color', 'white');
+
+    // Bottom buttons
+    let bottomButtonsStartX = windowWidth - 3 * buttonWidth - 4 * spacing;
+    let bottomY = height - buttonHeight - spacing;
+
+    // Save and Load buttons
+    saveButton = createNeumorphicButton('Save', (windowWidth / 2) - (buttonWidth + spacing), bottomY, buttonWidth, buttonHeight, saveParticles);
+    loadButton = createNeumorphicButton('Load', (windowWidth / 2) + spacing, bottomY, buttonWidth, buttonHeight, loadParticles);
+
+    // Export and Import buttons
+    exportButton = createNeumorphicButton('Export', bottomButtonsStartX, bottomY, buttonWidth, buttonHeight, exportToJsonFile);
+    bottomButtonsStartX += buttonWidth + spacing;
+
+importButton = createNeumorphicButton('Import', bottomButtonsStartX, bottomY, buttonWidth, buttonHeight, () => document.getElementById('fileInput').click());
+
+
+
+    // Create an initial set of particles
+    for (let i = 0; i < 3; i++) {
+        let tags = ['Tag1', 'Tag2', 'Tag3', 'Tag4', 'Tag5'];
+        let selectedTags = tags.filter(() => random() > 0.5);
+        particles.push(new Particle(`Particle ${i + 1}`, `Notes for ${i + 1}`, selectedTags.join(',')));
+    }
+}
+
+// Function to handle file input
+function handleFile(file) {
+    if (file.type === 'application/json') {
+        let fileContents = JSON.parse(file.data);
+        particles = fileContents.map(p => new Particle(p.name, p.notes, p.tags.join(',')));
+    }
+}
+function draw() {
+    background(50);
+    particles.forEach(particle => {
+        particle.update();
+        particle.display(); // First, display the particle
+        particle.displayConnectionCount(particles); // Then, display the connection count on top
+        particle.applyBehaviors(particles);
+
+        if (particle.isSelected) {
+            particle.displayConnections(particles);
+        }
+        if (showAllConnections) {
+            particle.displayAllConnections(particles);
+        }
+      // In the draw function
+particles.forEach(particle => {
+    particle.displayDetails(); // Call this method for each particle
+});
+    });
+}
+
+// Handle window resizing
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+}
+
+// Submit or edit particles
+function handleParticle() {
+  if (selectedParticle) {
+    // Edit existing particle's properties
+    selectedParticle.name = inputName.value();
+    selectedParticle.notes = inputNotes.value();
+    selectedParticle.tags = inputTags.value().split(',').map(tag => tag.trim());
+    selectedParticle.isClicked = false;
+    selectedParticle = null;
+    submitButton.html('Submit');
+  } else {
+    // Add a new particle
+    let name = inputName.value();
+    let notes = inputNotes.value();
+    let tags = inputTags.value();
+    particles.push(new Particle(name, notes, tags));
+  }
+  clearInputs();
+}
+
+// Clear input fields
+function clearInputs() {
+  inputName.value('');
+  inputNotes.value('');
+  inputTags.value('');
+}
+
+// Check if mouse is pressed on particles or input fields
+function mousePressed() {
+  if (!mouseOnInput()) {
+    let clickedOnParticle = false;
+    particles.forEach(particle => {
+      if (particle.clicked(mouseX, mouseY)) {
+        clickedOnParticle = true;
+        selectedParticle = particle;
+        inputName.value(particle.name);
+        inputNotes.value(particle.notes);
+        inputTags.value(particle.tags.join(', '));
+        submitButton.html('Edit');
+      }
+    });
+    if (!clickedOnParticle && selectedParticle) {
+      selectedParticle.isClicked = false;
+      selectedParticle = null;
+      clearInputs();
+      submitButton.html('Submit');
+    }
+  }
+}
+
+// Helper function to determine if the mouse is over any input element
+function mouseOnInput() {
+  let inputs = [inputName, inputNotes, inputTags];
+  return inputs.some(input => {
+    let bounds = input.elt.getBoundingClientRect();
+    return mouseX > bounds.left && mouseX < bounds.right && mouseY > bounds.top && mouseY < bounds.bottom;
+  });
+}
+
+// Particle class to handle individual particle behavior
+class Particle {
+    constructor(name, notes, tags) {
+        this.pos = createVector(random(width), random(height));
+        this.vel = createVector(random(-2, 2), random(-2, 2));
+        this.acc = createVector();
+        this.size = 10;
+        this.name = name || '';
+        this.notes = notes || '';
+        this.tags = tags ? tags.split(',').map(tag => tag.trim()) : [];
+        this.isClicked = false;
+              this.isSelected = false; // New property
+    }
+
+    // Apply behaviors like attraction and mouse slowing down
+    applyBehaviors(particles) {
+        this.attractOtherParticles(particles);
+        this.applyRepulsion(particles); // Apply repulsion
+        this.slowDownNearMouse();
+    }
+
+    // Slow down particle when mouse is near
+    slowDownNearMouse() {
+        let mouseVec = createVector(mouseX, mouseY);
+        if (this.pos.dist(mouseVec) < 50) {
+            this.vel.mult(0.9); // Reduce the velocity a bit to slow down
+        }
+    }
+
+    // Attract particles with similar tags more strongly
+    attractOtherParticles(particles) {
+        particles.forEach(other => {
+            if (this !== other) {
+                let similarityScore = this.calculateSimilarity(other); // Calculate similarity
+                let force = p5.Vector.sub(other.pos, this.pos);
+                let distance = force.mag();
+                distance = constrain(distance, 5, 25); // Limit the range
+                let strength = (similarityScore / (distance * distance)) * 0.1;
+                force.setMag(strength);
+                this.applyForce(force);
+            }
+        });
+    }
+
+    // Calculate similarity based on shared tags
+    calculateSimilarity(otherParticle) {
+        let sharedTags = this.tags.filter(tag => otherParticle.tags.includes(tag));
+        return sharedTags.length; // The number of shared tags
+    }
+
+    // Method to apply repulsive force
+    applyRepulsion(particles) {
+        particles.forEach(other => {
+            if (this !== other) {
+                let d = this.pos.dist(other.pos);
+                if (d < this.size * 2 + other.size * 2) { // Repulsion threshold distance
+                    let repulsion = p5.Vector.sub(this.pos, other.pos);
+                    repulsion.normalize();
+                    repulsion.div(d); // The closer they are, the stronger the repulsion
+                    this.acc.add(repulsion);
+                }
+            }
+        });
+    }
+    // Handle collisions with other particles
+    handleCollisions(particles) {
+        particles.forEach(other => {
+            if (this !== other) {
+                let d = this.pos.dist(other.pos);
+                if (d < this.size + other.size) {
+                    let overlap = this.size + other.size - d;
+                    let direction = p5.Vector.sub(this.pos, other.pos);
+                    direction.normalize();
+                    direction.mult(overlap * 0.5);
+                    this.pos.add(direction);
+                    other.pos.sub(direction);
+                }
+            }
+        });
+    }
+
+    // New method to highlight connections with color-coded lines
+    highlightConnections(particles) {
+        particles.forEach(other => {
+            if (other !== this && this.commonTags(other)) {
+                stroke(0, 255, 0); // Green for shared tags
+                line(this.pos.x, this.pos.y, other.pos.x, other.pos.y);
+            }
+        });
+    }
+
+    // Update particle position and reset acceleration
+    update() {
+        this.vel.add(this.acc);
+        this.pos.add(this.vel);
+        this.acc.mult(0); // Reset acceleration
+        this.edges(); // Check for canvas edges
+    }
+
+    // Display particle as a circle with its name
+display() {
+    fill(255);
+    noStroke();
+    circle(this.pos.x, this.pos.y, this.size * 2);
+    fill(255);
+    noStroke();
+    text(this.name, this.pos.x, this.pos.y + this.size + 12); // Adjust Y-offset here
+}
+
+    // Update the display method to toggle the selected state
+    clicked(px, py) {
+        let d = dist(px, py, this.pos.x, this.pos.y);
+        if (d < this.size) {
+            this.isSelected = !this.isSelected; // Toggle selected state
+            return true;
+        }
+        return false;
+    }
+  
+    displayConnectionCount(particles) {
+        let count = this.countConnections(particles);
+        push(); // Save current drawing style settings
+        fill(0); // Choose a contrasting text color
+        stroke(255); // Optional: Add a stroke to make text more readable
+        textAlign(CENTER, CENTER); // Center the text over the particle
+        textSize(16); // Adjust text size as needed
+        text(count, this.pos.x, this.pos.y); // Display count over the particle
+        pop(); // Restore original drawing style settings
+    }
+
+displayConnections(particles) {
+    particles.forEach(other => {
+        if (this !== other && this.commonTags(other)) {
+            let similarityScore = this.calculateSimilarity(other);
+            let color = getColorBasedOnScore(similarityScore); // Function to determine color
+            stroke(color);
+            line(this.pos.x, this.pos.y, other.pos.x, other.pos.y);
+        }
+    });
+}
+// New method in the Particle class
+displayAllConnections(particles) {
+    stroke(255, 100, 100); // Choose a color
+    particles.forEach(other => {
+        if (this !== other && this.commonTags(other)) { // Check for common tags
+            line(this.pos.x, this.pos.y, other.pos.x, other.pos.y);
+        }
+    });
+}
+// In the Particle class
+// In the Particle class
+displayDetails() {
+    if (this.isSelected) {
+        push(); // Isolate styles for the text and box
+
+        // Calculate box dimensions based on text
+        textAlign(LEFT);
+        let padding = 10;
+        let textWidths = [textWidth(`Name: ${this.name}`)].concat(this.tags.map(tag => textWidth(tag)));
+        let boxWidth = max(...textWidths) + (padding * 2); // Width based on the longest text
+        let boxHeight = (this.tags.length + 1) * 20 + (padding * 2); // Height based on the number of lines
+
+        // Ensure the box stays within canvas bounds
+        let boxX = this.pos.x + 20;
+        let boxY = this.pos.y - 20;
+        if (boxX + boxWidth > width) {
+            boxX = this.pos.x - boxWidth - 20;
+        }
+        if (boxY + boxHeight > height) {
+            boxY = height - boxHeight - 20;
+        }
+
+        // Draw the box
+        fill(255);
+        rect(boxX, boxY, boxWidth, boxHeight);
+
+        // Display the text
+        fill(0);
+        noStroke();
+        textSize(12);
+        text(`Name: ${this.name}`, boxX + padding, boxY + 20);
+        for (let i = 0; i < this.tags.length; i++) {
+            text(this.tags[i], boxX + padding, boxY + 40 + (i * 20));
+        }
+
+        pop(); // Restore original styles
+    }
+}
+
+countConnections(particles) {
+    return particles.filter(other => this !== other && this.commonTags(other)).length;
+}
+
+
+    // Check if particles share a tag
+    commonTags(other) {
+        return this.tags.some(tag => other.tags.includes(tag));
+    }
+
+    // Keep particle within canvas bounds
+    edges() {
+        if (this.pos.x <= this.size || this.pos.x >= width - this.size) {
+            this.vel.x *= -1;
+        }
+        if (this.pos.y <= this.size || this.pos.y >= height - this.size) {
+            this.vel.y *= -1;
+        }
+    }
+
+    // Apply a force to the particle
+    applyForce(force) {
+        this.acc.add(force);
+    }
+}
+
+function createNeumorphicButton(label, x, y, width, height, callback) {
+    let btn = createButton(label);
+    btn.position(x, y);
+    btn.size(width, height);
+    btn.style('background-color', '#3D3D3D');
+    btn.style('color', 'white');
+    btn.style('border', 'none');
+    btn.style('padding', '10px');
+    btn.style('margin', '5px');
+    btn.style('border-radius', '10px');
+    btn.style('box-shadow', '6px 6px 12px #1B1B1B, -6px -6px 12px #5F5F5F');
+    btn.mousePressed(callback);
+
+    // Optional: Add hover effect
+    btn.mouseOver(() => btn.style('background-color', '#353535'));
+    btn.mouseOut(() => btn.style('background-color', '#3D3D3D'));
+
+    return btn;
+}
+// Modify the createNeumorphicInput function to add more space between inputs
+function createNeumorphicInput(x, y, width, height, placeholder) {
+    let input = createInput('');
+    input.position(x, y);
+    input.size(width, height);
+    input.attribute('placeholder', placeholder);
+    input.style('background-color', '#3D3D3D');
+    input.style('color', 'white');
+    input.style('border', 'none');
+    input.style('padding', '10px');
+    input.style('margin', '10px'); // Increased margin for more space
+    input.style('border-radius', '10px');
+    input.style('box-shadow', '6px 6px 12px #1B1B1B, -6px -6px 12px #5F5F5F');
+    input.style('outline', 'none');
+
+    return input;
+}
+// Example function to determine the color based on similarity score
+function getColorBasedOnScore(score) {
+    if (score > 5) return color(255, 0, 0); // Strong connection: Red
+    if (score > 3) return color(0, 255, 0); // Medium connection: Green
+    return color(0, 0, 255); // Weak connection: Blue
+}
+// Function to delete the selected particle
+function deleteSelectedParticle() {
+  if (selectedParticle && confirm("Are you sure you want to delete this particle?")) {
+    particles = particles.filter(p => p !== selectedParticle);
+    selectedParticle = null;
+    clearInputs();
+  }
+}
+
+function saveParticles() {
+  // Create a simplified version of particles for JSON conversion
+  const simplifiedParticles = particles.map(p => {
+    return {
+      name: p.name,
+      notes: p.notes,
+      tags: p.tags,
+      // Add any other properties you need, excluding those with circular references
+    };
+  });
+  localStorage.setItem('particles', JSON.stringify(simplifiedParticles));
+}
+
+// Load state from local storage
+function loadParticles() {
+  let savedParticles = JSON.parse(localStorage.getItem('particles'));
+  if (savedParticles) {
+    particles = savedParticles.map(p => new Particle(p.name, p.notes, p.tags.join(',')));
+  }
+}
+
+
+function exportToJsonFile() {
+  let simplifiedParticles = particles.map(p => {
+    return {
+      name: p.name,
+      notes: p.notes,
+      tags: p.tags,
+      // Add any other properties you need
+    };
+  });
+
+  let dataStr = JSON.stringify(simplifiedParticles);
+  let dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+
+  // Get current date
+  let date = new Date();
+  let dateString = date.toISOString().split('T')[0]; // Format: YYYY-MM-DD
+  let exportFileDefaultName = `particles_${dateString}.json`;
+
+  let linkElement = document.createElement('a');
+  linkElement.setAttribute('href', dataUri);
+  linkElement.setAttribute('download', exportFileDefaultName);
+  linkElement.click();
+}
+
+function importFromJsonFile(fileInput) {
+  let file = fileInput.files[0];
+  let reader = new FileReader();
+  reader.onload = function(e) {
+    let jsonContent = JSON.parse(e.target.result);
+    // Clear existing particles
+    particles = [];
+    // Load new particles
+    jsonContent.forEach(p => {
+      particles.push(new Particle(p.name, p.notes, p.tags.join(',')));
+    });
+  };
+  reader.readAsText(file);
+}
+
+    </script>
+</body>
+
+
+</html>
